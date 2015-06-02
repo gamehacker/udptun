@@ -173,20 +173,28 @@ class Server():
 class Client():
     def create_tun(self):
         """ Every client needs a tun interface """
-        try:
-            tun_fd = os.open("/dev/net/tun", os.O_RDWR)
-        except:
-            tun_fd = os.open("/dev/tun", os.O_RDWR)
-        ifs = fcntl.ioctl(tun_fd, TUNSETIFF, struct.pack("16sH", "t%d", IFF_TUN))
-        tname = ifs[:16].strip("\x00")
+        if sys.platform == 'darwin':
+            for i in xrange(10):
+                try:
+                    tname = 'tun%s' % i
+                    tun_fd = os.open('/dev/%s' % tname, os.O_RDWR)
+                    break
+                except:
+                    continue
+        else:
+            try:
+                tun_fd = os.open("/dev/net/tun", os.O_RDWR)
+            except:
+                tun_fd = os.open("/dev/tun", os.O_RDWR)
+            ifs = fcntl.ioctl(tun_fd, TUNSETIFF, struct.pack("16sH", "t%d", IFF_TUN))
+            tname = ifs[:16].strip("\x00")
+
         return {'tun_fd': tun_fd, 'tun_name': tname}
     
     def config_tun(self, c):
         """ Set up local ip and peer ip """
         print "Configuring interface %s with ip %s" % (c['tun_name'], c['tun_ip'])
-        os.system("ip link set %s up" % (c['tun_name']))
-        os.system("ip link set %s mtu %d" % (c['tun_name'], MTU))
-        os.system("ip addr add %s peer %s dev %s" % (c['tun_ip'], c['tun_peer'], c['tun_name']))
+        os.system("ifconfig %s %s/32 %s mtu %s up" % (c['tun_name'], c['tun_ip'], c['tun_peer'], MTU))
 
     def do_login(self, data):
         """ Check login results """
