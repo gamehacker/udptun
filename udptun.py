@@ -24,7 +24,7 @@ import re
 
 SHARED_PASSWORD = hashlib.sha1("feiwu").digest()
 TUNSETIFF = 0x400454ca
-IFF_TUN   = 0x0001
+IFF_TUN   = 0x0001 | 0x1000 #TUN + NO_PI
 
 BUFFER_SIZE = 8192
 MODE = 0
@@ -46,16 +46,14 @@ class Server():
             tun_fd = os.open("/dev/tun", os.O_RDWR)
         if tun_fd < 0:
             raise Exception('Failed to create tun device')
-        ifs = fcntl.ioctl(tun_fd, TUNSETIFF, struct.pack("16sH", "t%d", IFF_TUN))
+        ifs = fcntl.ioctl(tun_fd, TUNSETIFF, struct.pack("16sH", "tun%d", IFF_TUN))
         tname = ifs[:16].strip("\x00")
         return {'tun_fd': tun_fd, 'tun_name': tname}
     
     def config_tun(self, c):
         """Set up IP address and P2P address"""
         print "Configuring interface %s with ip %s" % (c['tun_name'], c['tun_ip'])
-        os.system("ifconfig %s up" % (c['tun_name']))
-        os.system("ifconfig %s mtu %d" % (c['tun_name'], MTU))
-        os.system("ifconfig %s inet %s %s" % (c['tun_name'], c['tun_ip'], c['tun_peer']))
+        os.system("ifconfig %s %s dstaddr %s mtu %s up" % (c['tun_name'], c['tun_ip'], c['tun_peer'], MTU))
 
     def get_client_by_addr(self, addr):
         for c in self.sessions:
@@ -89,7 +87,7 @@ class Server():
                 return
             # Find existing session 
             found = False
-            for c in self.session:
+            for c in self.sessions:
                 if c['tun_peer'] == d['tun_ip'] and c['tun_ip'] == d['tun_peer']:
                     c['addr'] = addr
                     found = True
@@ -144,6 +142,7 @@ class Server():
         self.sessions = []
         self.rt_sync_time = 0
 
+        print 'Server listen at port', PORT
         while True:
             now = int(time.time())
             fds = [x['tun_fd'] for x in self.sessions]
